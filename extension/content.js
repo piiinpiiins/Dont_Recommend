@@ -304,6 +304,10 @@ async function clickDontRecommend(card) {
 
     // Step 2: 輪詢等待 ⋮ 按鈕出現（可能 lazy-loaded）
     const MENU_BTN_SELECTORS = [
+      // NEW: Lit view-model 選單按鈕（首頁 2025+）
+      '.yt-lockup-metadata-view-model__menu-button button',
+      'button-view-model button',
+      // OLD: Polymer 選單按鈕（訂閱頁/舊版）
       'ytd-menu-renderer yt-icon-button#button',
       '#menu ytd-menu-renderer button',
       '#menu button',
@@ -360,8 +364,11 @@ async function clickDontRecommend(card) {
 
     // Step 4: 輪詢等待 popup 選項出現（在 document 層級搜尋）
     const POPUP_ITEM_SELECTORS = [
+      // NEW: Lit view-model 選單項目（首頁 2025+）
+      'yt-list-view-model > yt-list-item-view-model',
+      // OLD: Polymer 選單項目（訂閱頁/舊版）
+      'ytd-menu-popup-renderer #items ytd-menu-service-item-renderer',
       'tp-yt-paper-listbox ytd-menu-service-item-renderer',
-      'ytd-menu-popup-renderer ytd-menu-service-item-renderer',
       'ytd-menu-service-item-renderer',
     ];
 
@@ -375,6 +382,20 @@ async function clickDontRecommend(card) {
 
       // 檢查 popup 是否出現
       for (let attempt = 0; attempt < 8; attempt++) {
+        // 優先在 tp-yt-iron-dropdown 容器內搜尋
+        const dropdown = document.querySelector('ytd-popup-container tp-yt-iron-dropdown');
+        if (dropdown) {
+          // 新結構：yt-list-item-view-model
+          const newItems = dropdown.querySelectorAll('yt-list-item-view-model');
+          if (newItems.length > 0) { menuItems = newItems; break; }
+          // 舊結構：ytd-menu-service-item-renderer
+          const oldItems = dropdown.querySelectorAll('ytd-menu-service-item-renderer');
+          if (oldItems.length > 0) { menuItems = oldItems; break; }
+          // 通用 fallback：role="menu" 或 role="listbox" 的子元素
+          const roleMenu = dropdown.querySelector('[role="menu"], [role="listbox"]');
+          if (roleMenu && roleMenu.children.length > 0) { menuItems = roleMenu.children; break; }
+        }
+        // 全域 fallback
         for (const sel of POPUP_ITEM_SELECTORS) {
           const items = document.querySelectorAll(sel);
           if (items.length > 0) { menuItems = items; break; }
@@ -391,8 +412,12 @@ async function clickDontRecommend(card) {
 
     if (menuItems.length === 0) {
       // Debug: 列出 DOM 中所有可能的 popup 元素
+      const dropdown = document.querySelector('ytd-popup-container tp-yt-iron-dropdown');
+      if (dropdown) {
+        console.warn(LOG, `clickDontRecommend: dropdown found but no items. innerHTML preview: ${dropdown.innerHTML.slice(0, 500)}`);
+      }
       const debugPopups = document.querySelectorAll(
-        'ytd-menu-popup-renderer, tp-yt-iron-dropdown, ytd-popup-container, [role="menu"], [role="listbox"]'
+        'ytd-menu-popup-renderer, tp-yt-iron-dropdown, ytd-popup-container, yt-list-view-model, [role="menu"], [role="listbox"]'
       );
       console.warn(LOG, `clickDontRecommend: no menu items found. Popup elements in DOM: ${debugPopups.length}`);
       for (const p of debugPopups) {

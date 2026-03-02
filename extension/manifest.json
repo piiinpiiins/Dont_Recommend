@@ -18,8 +18,8 @@
         "*://www.youtube.com/*"
       ],
       "js": [
-        "AI/ai-warfare-patterns.js",
-        "AI/detector.js",
+        "ai-warfare-patterns.js",
+        "detector.js",
         "content.js"
       ],
       "run_at": "document_idle"
