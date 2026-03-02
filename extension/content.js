@@ -290,47 +290,119 @@ function randomDelay(min, max) { return sleep(min + Math.random() * (max - min))
 
 async function clickDontRecommend(card) {
   try {
-    // Step 1: Find the ⋮ menu button on this card
-    const menuRenderer = card.querySelector('ytd-menu-renderer');
-    if (!menuRenderer) {
-      console.warn(LOG, 'clickDontRecommend: no ytd-menu-renderer on card');
-      return false;
-    }
-    const menuBtn = menuRenderer.querySelector('button')
-      || menuRenderer.querySelector('yt-icon-button');
-    if (!menuBtn) {
-      console.warn(LOG, 'clickDontRecommend: no menu button found');
-      return false;
-    }
+    // Step 1: 模擬完整 hover — 帶座標讓 Polymer 元件觸發 hover 狀態
+    const rect = card.getBoundingClientRect();
+    const hoverOpts = {
+      bubbles: true, cancelable: true, view: window,
+      clientX: rect.right - 30,   // 靠右側（⋮ 按鈕通常在右上角）
+      clientY: rect.top + 30,
+    };
+    card.dispatchEvent(new MouseEvent('mouseover', hoverOpts));
+    card.dispatchEvent(new MouseEvent('mouseenter', hoverOpts));
+    card.dispatchEvent(new MouseEvent('mousemove', hoverOpts));
+    await sleep(300);
 
-    // Step 2: Click ⋮ to open popup
-    console.log(LOG, 'clickDontRecommend: opening ⋮ menu...');
-    simulateClick(menuBtn);
-    await randomDelay(400, 800);
+    // Step 2: 輪詢等待 ⋮ 按鈕出現（可能 lazy-loaded）
+    const MENU_BTN_SELECTORS = [
+      'ytd-menu-renderer yt-icon-button#button',
+      '#menu ytd-menu-renderer button',
+      '#menu button',
+    ];
+    const MENU_BTN_ARIA_LABELS = [
+      'Action menu', 'More actions', '動作選單', '操作菜单', '其他動作', '更多操作',
+    ];
 
-    // Step 3: Wait for popup to render (appears at body level)
-    let menuPopup = null;
-    for (let i = 0; i < 10; i++) {
-      const popups = document.querySelectorAll('ytd-menu-popup-renderer');
-      if (popups.length > 0) {
-        const candidate = popups[popups.length - 1];
-        if (candidate.offsetParent !== null || getComputedStyle(candidate).display !== 'none') {
-          menuPopup = candidate;
-          break;
-        }
+    let menuBtn = null;
+    for (let attempt = 0; attempt < 10; attempt++) {
+      // 嘗試 CSS selectors
+      for (const sel of MENU_BTN_SELECTORS) {
+        const el = card.querySelector(sel);
+        if (el) { menuBtn = el; break; }
       }
+      if (menuBtn) break;
+
+      // 嘗試 aria-label
+      for (const label of MENU_BTN_ARIA_LABELS) {
+        const el = card.querySelector(`button[aria-label="${label}"]`)
+          || card.querySelector(`yt-icon-button[aria-label="${label}"]`);
+        if (el) { menuBtn = el; break; }
+      }
+      if (menuBtn) break;
+
+      // 重送 hover 事件（某些 Polymer 元件需要持續 hover）
+      card.dispatchEvent(new MouseEvent('mousemove', {
+        ...hoverOpts,
+        clientX: hoverOpts.clientX + Math.random() * 4 - 2,
+      }));
       await sleep(200);
     }
-    if (!menuPopup) {
-      console.warn(LOG, 'clickDontRecommend: popup did not appear');
+
+    if (!menuBtn) {
+      console.warn(LOG, 'clickDontRecommend: ⋮ button not found after polling');
+      return false;
+    }
+
+    // Step 3: 點 ⋮ 按鈕 — 嘗試多個 click 目標
+    // YouTube Polymer 的 click handler 可能在 yt-icon-button 上，不在內部 <button> 上
+    const clickTargets = [menuBtn];
+    // 如果找到的是 <button>，加入父層 yt-icon-button 作為候選
+    if (menuBtn.tagName === 'BUTTON') {
+      const parentIcon = menuBtn.closest('yt-icon-button');
+      if (parentIcon) clickTargets.push(parentIcon);
+    }
+    // 如果找到的是 yt-icon-button，也加入內部 <button>
+    if (menuBtn.tagName === 'YT-ICON-BUTTON') {
+      const innerBtn = menuBtn.querySelector('button');
+      if (innerBtn) clickTargets.push(innerBtn);
+    }
+
+    console.log(LOG, `clickDontRecommend: clicking ⋮ targets: [${clickTargets.map(t => `${t.tagName}(aria="${t.getAttribute('aria-label')}")`).join(', ')}]`);
+
+    // Step 4: 輪詢等待 popup 選項出現（在 document 層級搜尋）
+    const POPUP_ITEM_SELECTORS = [
+      'tp-yt-paper-listbox ytd-menu-service-item-renderer',
+      'ytd-menu-popup-renderer ytd-menu-service-item-renderer',
+      'ytd-menu-service-item-renderer',
+    ];
+
+    let menuItems = [];
+    for (const target of clickTargets) {
+      // 每個 target 嘗試多種 click 方式
+      target.click();
+      await sleep(300);
+      simulateClick(target);
+      await sleep(500);
+
+      // 檢查 popup 是否出現
+      for (let attempt = 0; attempt < 8; attempt++) {
+        for (const sel of POPUP_ITEM_SELECTORS) {
+          const items = document.querySelectorAll(sel);
+          if (items.length > 0) { menuItems = items; break; }
+        }
+        if (menuItems.length > 0) break;
+        await sleep(200);
+      }
+      if (menuItems.length > 0) break;
+
+      // 這個 target 沒用，關閉可能殘留的 popup，試下一個
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await sleep(200);
+    }
+
+    if (menuItems.length === 0) {
+      // Debug: 列出 DOM 中所有可能的 popup 元素
+      const debugPopups = document.querySelectorAll(
+        'ytd-menu-popup-renderer, tp-yt-iron-dropdown, ytd-popup-container, [role="menu"], [role="listbox"]'
+      );
+      console.warn(LOG, `clickDontRecommend: no menu items found. Popup elements in DOM: ${debugPopups.length}`);
+      for (const p of debugPopups) {
+        console.log(LOG, `  <${p.tagName}> display=${getComputedStyle(p).display} children=${p.children.length}`);
+      }
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
       return false;
     }
 
-    // Step 4: Find "Don't recommend channel" by text content
-    const menuItems = menuPopup.querySelectorAll(
-      'ytd-menu-service-item-renderer, tp-yt-paper-item'
-    );
+    // Step 5: 用 textContent 比對「不要推薦這個頻道」
     let targetItem = null;
     for (const item of menuItems) {
       const text = item.textContent?.trim() || '';
@@ -339,8 +411,9 @@ async function clickDontRecommend(card) {
         break;
       }
     }
+
     if (!targetItem) {
-      console.warn(LOG, 'clickDontRecommend: option not found. Menu items:');
+      console.warn(LOG, 'clickDontRecommend: "Don\'t recommend" not found. Items:');
       for (const item of menuItems) {
         console.log(LOG, `  "${item.textContent?.trim()}"`);
       }
@@ -349,17 +422,13 @@ async function clickDontRecommend(card) {
       return false;
     }
 
-    // Step 5: Click the option
+    // Step 6: 點擊選項
     console.log(LOG, `clickDontRecommend: clicking "${targetItem.textContent?.trim()}"`);
-    await randomDelay(200, 500);
-    simulateClick(targetItem);
+    await randomDelay(100, 300);
+    targetItem.click();
     await sleep(500);
-    // Fallback: also try inner tp-yt-paper-item
-    const inner = targetItem.querySelector('tp-yt-paper-item');
-    if (inner) inner.click();
 
     console.log(LOG, 'clickDontRecommend: SUCCESS');
-    await sleep(800);
     return true;
   } catch (err) {
     console.error(LOG, 'clickDontRecommend error:', err);
