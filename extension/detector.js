@@ -1,9 +1,9 @@
 // ============================================================
-// CLEAR-gen — Multi-Signal Detection Engine
+// Dont_Recommend — Multi-Signal Detection Engine
 // 多信號加權偵測引擎
 // ============================================================
 
-const DETECTOR_LOG = '[CLEAR-gen/detector]';
+const DETECTOR_LOG = '[Dont_Recommend/detector]';
 
 // ============================================================
 // SECTION A: DETECTION CATEGORIES & LABELS
@@ -103,7 +103,7 @@ const CHANNEL_BLACKLIST = [
     /中天/,
     /TVBS/i,
     /少康/,
-    /人民報/,  /renminbao/i,
+    /人民報/, /renminbao/i,
     /少唐戰情室/,
     /更新台灣/,
     /新聞大白話/,

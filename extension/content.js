@@ -1,10 +1,10 @@
 // ============================================================
-// CLEAR-gen Content Script
+// Dont_Recommend Content Script
 // 首頁掃描 → Badge 標記 → 開啟可疑影片 → Dislike → 自動播放循環
 // Detection engine loaded from: detector.js + ai-warfare-patterns.js
 // ============================================================
 
-const LOG = '[CLEAR-gen]';
+const LOG = '[Dont_Recommend]';
 
 // BADGE_CLASS used by badge injection code below
 // Detection constants (DETECTION_CATEGORIES, CATEGORY_LABELS, SEVERITY)
@@ -457,7 +457,7 @@ async function clickDontRecommend(card) {
     return true;
   } catch (err) {
     console.error(LOG, 'clickDontRecommend error:', err);
-    try { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); } catch (_) {}
+    try { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); } catch (_) { }
     return false;
   }
 }
@@ -565,7 +565,7 @@ async function scanHomePage() {
             if (cardVideoId) processedVideoIds.add(cardVideoId);
             try {
               chrome.runtime.sendMessage({ type: 'DONT_RECOMMEND_RECORDED', categories: cats });
-            } catch (_) {}
+            } catch (_) { }
             await randomDelay(1000, 2000);
             continue; // Card removed by YouTube, scan next
           }

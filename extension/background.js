@@ -1,4 +1,4 @@
-// CLEAR-gen Background Service Worker
+// Dont_Recommend Background Service Worker
 
 const DEFAULT_STATE = {
   enabled: true,
@@ -21,7 +21,7 @@ const DEFAULT_STATE = {
 chrome.runtime.onInstalled.addListener(async (details) => {
   if (details.reason === 'install') {
     await chrome.storage.local.set(DEFAULT_STATE);
-    console.log('[CLEAR-gen] Extension installed, defaults set');
+    console.log('[Dont_Recommend] Extension installed, defaults set');
   }
   // On update, migrate stats to include byCategory if missing
   if (details.reason === 'update') {
@@ -29,7 +29,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     if (data.stats && !data.stats.byCategory) {
       data.stats.byCategory = { ...DEFAULT_STATE.stats.byCategory };
       await chrome.storage.local.set({ stats: data.stats });
-      console.log('[CLEAR-gen] Stats migrated to include byCategory');
+      console.log('[Dont_Recommend] Stats migrated to include byCategory');
     }
   }
 });
