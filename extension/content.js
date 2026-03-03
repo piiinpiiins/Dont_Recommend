@@ -509,9 +509,13 @@ async function scanHomePage() {
 
   let scrollAttempts = 0;
   const MAX_SCROLL_ATTEMPTS = 100;
+  let lastCardCount = 0;
+  let staleScrollCount = 0;
+  const MAX_STALE_SCROLLS = 5;
 
   while (enabled && scrollAttempts < MAX_SCROLL_ATTEMPTS) {
     const cards = document.querySelectorAll(SELECTORS.homeCards[0]);
+    const currentCardCount = cards.length;
 
     for (const card of cards) {
       if (!enabled) break;
@@ -581,7 +585,26 @@ async function scanHomePage() {
     }
 
     scrollAttempts++;
-    console.log(LOG, `Scrolling... (${scrollAttempts}/${MAX_SCROLL_ATTEMPTS})`);
+
+    // Stall detection: if no new cards loaded after scrolling, count as stale
+    if (currentCardCount <= lastCardCount) {
+      staleScrollCount++;
+      console.log(LOG, `Scrolling... (${scrollAttempts}/${MAX_SCROLL_ATTEMPTS}) — no new cards (stale ${staleScrollCount}/${MAX_STALE_SCROLLS})`);
+    } else {
+      staleScrollCount = 0;
+      console.log(LOG, `Scrolling... (${scrollAttempts}/${MAX_SCROLL_ATTEMPTS}) — ${currentCardCount} cards`);
+    }
+    lastCardCount = currentCardCount;
+
+    // If stale for too long, stop scrolling and refresh
+    if (staleScrollCount >= MAX_STALE_SCROLLS) {
+      console.log(LOG, `Feed stalled after ${scrollAttempts} scrolls. Refreshing homepage...`);
+      isRunning = false;
+      await sleep(2000);
+      goHome();
+      return;
+    }
+
     window.scrollBy({ top: 600, behavior: 'smooth' });
     await randomDelay(1500, 2500);
   }
