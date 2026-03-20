@@ -32,11 +32,30 @@ chrome.runtime.sendMessage({ type: 'GET_STATE' }, (response) => {
   }
 });
 
+// Helper function to format time as HH:MM
+function formatTime(date) {
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
 // Load schedule on popup open
 chrome.runtime.sendMessage({ type: 'GET_SCHEDULE' }, (response) => {
   if (response) {
-    scheduleStartInput.value = response.scheduleStart || '';
-    scheduleEndInput.value = response.scheduleEnd || '';
+    // If no schedule is set, auto-fill with current time and +5 minutes
+    if (!response.scheduleStart && !response.scheduleEnd) {
+      const now = new Date();
+      const fiveMinutesLater = new Date(now.getTime() + 5 * 60 * 1000);
+
+      scheduleStartInput.value = formatTime(now);
+      scheduleEndInput.value = formatTime(fiveMinutesLater);
+
+      // Auto-save the default schedule
+      saveSchedule();
+    } else {
+      scheduleStartInput.value = response.scheduleStart || '';
+      scheduleEndInput.value = response.scheduleEnd || '';
+    }
   }
 });
 

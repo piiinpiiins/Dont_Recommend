@@ -584,6 +584,7 @@ async function scanHomePage() {
           // Fallback: click into video for dislike flow
           await randomDelay(500, 1500);
           console.log(LOG, `Opening video: 「${title.slice(0, 50)}」`);
+          window.__fromAutomatedScan = true; // Mark as automated scan
           simulateClick(link);
           isRunning = false;
           return;
@@ -788,9 +789,12 @@ async function handleWatchPage() {
   if (!enabled) return;
   isRunning = true;
 
+  // Check if this is a manual navigation (not from our automated scan)
+  const isManualNavigation = !window.__fromAutomatedScan;
+
   // Extract video ID early so we can mark it processed before any early return
   const videoId = new URLSearchParams(window.location.search).get('v');
-  if (!videoId || processedVideoIds.has(videoId)) {
+  if (!videoId || (processedVideoIds.has(videoId) && !isManualNavigation)) {
     console.log(LOG, `Video ${videoId} already processed or no ID`);
     goHome();
     isRunning = false;
@@ -919,12 +923,133 @@ async function handleWatchPage() {
       await seekToEnd(2);
     }
 
+    // If this was a manual navigation, scan the recommendation sidebar
+    if (isManualNavigation) {
+      console.log(LOG, 'Manual navigation detected, scanning watch page recommendations...');
+      await scanWatchPageRecommendations();
+    }
+
     // Always go back to homepage after processing (avoid playlist traps)
     await sleep(500);
     goHome();
   } finally {
     clearTimeout(watchTimer);
     isRunning = false;
+    window.__fromAutomatedScan = false; // Reset flag
+  }
+}
+
+/**
+ * Scan and process recommended videos in the watch page sidebar
+ */
+async function scanWatchPageRecommendations() {
+  console.log(LOG, 'Scanning watch page recommendations...');
+
+  // Wait for recommendations to load
+  await sleep(2000);
+
+  // Select all recommendation cards in the sidebar
+  const recommendationCards = document.querySelectorAll('ytd-compact-video-renderer, ytd-compact-radio-renderer');
+  console.log(LOG, `Found ${recommendationCards.length} recommendation cards`);
+
+  let processedCount = 0;
+  let problemCount = 0;
+
+  for (const card of recommendationCards) {
+    // Skip if already has a badge
+    if (card.querySelector(`.${BADGE_CLASS}`)) continue;
+
+    // Extract title and channel
+    const titleEl = card.querySelector('#video-title');
+    const channelEl = card.querySelector('#channel-name #text, .ytd-channel-name #text');
+    const title = titleEl?.textContent?.trim() || '';
+    const channelName = channelEl?.textContent?.trim() || '';
+
+    if (!title) continue;
+
+    // Analyze the video
+    const result = analyzeVideo(title, channelName, card);
+
+    // Inject badge
+    if (result.categoriesDetected.length > 0) {
+      const severity = determineSeverity(result.categoriesDetected);
+      const color = BADGE_COLORS[severity];
+      const label = result.categoriesDetected.map(cat => CATEGORY_LABELS[cat]).join(', ');
+
+      const badge = document.createElement('span');
+      badge.className = `${BADGE_CLASS} ${BADGE_CLASS}-${severity}`;
+      badge.textContent = `${color} ${label}`;
+      badge.style.cssText = `
+        display: inline-block !important;
+        margin-right: 4px !important;
+        padding: 2px 6px !important;
+        border-radius: 3px !important;
+        font-size: 11px !important;
+        font-weight: bold !important;
+        color: white !important;
+        vertical-align: middle !important;
+      `;
+
+      // Insert badge before title
+      if (titleEl && titleEl.parentNode) {
+        titleEl.parentNode.insertBefore(badge, titleEl);
+      }
+
+      // If problematic, try to remove it
+      if (result.shouldAct) {
+        problemCount++;
+        console.log(LOG, `Found problematic video in recommendations: 「${title}」`);
+
+        // Try to click "Don't recommend" on the recommendation card
+        const menuButton = card.querySelector('button#button[aria-label*="Action menu"]');
+        if (menuButton) {
+          menuButton.click();
+          await sleep(500);
+
+          // Look for "Don't recommend channel" option
+          const menuItems = document.querySelectorAll('ytd-menu-service-item-renderer tp-yt-paper-item');
+          for (const item of menuItems) {
+            if (DONT_RECOMMEND_TEXT.some(text => item.textContent?.includes(text))) {
+              console.log(LOG, `Clicking "Don't recommend" for: 「${title}」`);
+              item.click();
+              await sleep(500);
+              break;
+            }
+          }
+
+          // Close menu if still open
+          const backdrop = document.querySelector('tp-yt-iron-dropdown[aria-hidden="false"]');
+          if (backdrop) {
+            document.body.click(); // Click outside to close
+            await sleep(300);
+          }
+        }
+      }
+    }
+
+    processedCount++;
+
+    // Process in batches to avoid overwhelming
+    if (processedCount % 5 === 0) {
+      await sleep(500);
+    }
+  }
+
+  console.log(LOG, `Scanned ${processedCount} recommendations, found ${problemCount} problematic videos`);
+
+  // Scroll to load more recommendations if needed
+  const secondarySection = document.querySelector('#secondary');
+  if (secondarySection && problemCount > 0) {
+    secondarySection.scrollTop = secondarySection.scrollHeight;
+    await sleep(1000);
+
+    // Check for newly loaded cards
+    const newCards = document.querySelectorAll('ytd-compact-video-renderer:not([data-scanned])');
+    if (newCards.length > 0) {
+      console.log(LOG, `Found ${newCards.length} new recommendation cards after scroll`);
+      // Mark all cards as scanned to avoid re-processing
+      recommendationCards.forEach(card => card.setAttribute('data-scanned', 'true'));
+    }
   }
 }
 
