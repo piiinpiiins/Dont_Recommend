@@ -146,6 +146,7 @@ const CHANNEL_WHITELIST = [
     '民進黨輿情回應',
     '愛爾達體育家族 ELTA Sports',
     '知定講堂 曹興誠',
+    '@HungyiLeeNTU',
     '鍾佳濱',
     '瑩真律師',
     'PanSci 泛科學',
